@@ -261,6 +261,13 @@ body{padding-top:36px}
 
 <!-- DASHBOARD TAB -->
 <div id="tab-dashboard">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <div style="font-size:13px;color:var(--text2)">Wyświetlaj wartości w:</div>
+    <div class="type-toggle" style="width:auto">
+      <button class="type-btn active" id="dashCurrBtn-USD" onclick="setDashCurr('USD')">🇺🇸 USD</button>
+      <button class="type-btn" id="dashCurrBtn-PLN" onclick="setDashCurr('PLN')">🇵🇱 PLN</button>
+    </div>
+  </div>
   <div class="cards-grid" id="summaryCards">
     <div class="card card-accent">
       <div class="card-label">Wartość portfela</div>
@@ -709,6 +716,71 @@ body{padding-top:36px}
     <div class="form-actions">
       <button class="btn" onclick="closeModal()">Anuluj</button>
       <button class="btn btn-primary" onclick="addPosition()">Dodaj pozycję</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT POSITION MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-title">✏️ Edytuj pozycję</div>
+    <input type="hidden" id="editPosId">
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Typ pozycji</label>
+        <div class="type-toggle" id="editTypeToggle">
+          <button class="type-btn active" onclick="setEditType('SPOT',this)">SPOT</button>
+          <button class="type-btn" onclick="setEditType('CFD',this)">CFD</button>
+        </div>
+        <input type="hidden" id="editType" value="SPOT">
+      </div>
+      <div class="form-group full">
+        <label>Symbol / Ticker</label>
+        <input type="text" id="editTicker" placeholder="np. AAPL, BTC-USD">
+      </div>
+      <div class="form-group full cfd-edit-fields" id="editDirectionField" style="display:none">
+        <label>Kierunek</label>
+        <div class="type-toggle">
+          <button class="type-btn active" onclick="setEditDir('LONG',this)">LONG ▲</button>
+          <button class="type-btn" onclick="setEditDir('SHORT',this)">SHORT ▼</button>
+        </div>
+        <input type="hidden" id="editDir" value="LONG">
+      </div>
+      <div class="form-group">
+        <label>Ilość / Wolumen</label>
+        <input type="number" id="editQty" placeholder="np. 10" step="any" min="0">
+      </div>
+      <div class="form-group">
+        <label>Cena wejścia (USD)</label>
+        <input type="number" id="editPrice" placeholder="np. 150.00" step="any" min="0">
+      </div>
+      <div class="form-group cfd-edit-fields" id="editLeverageField" style="display:none">
+        <label>Dźwignia</label>
+        <select id="editLev">
+          <option>1x</option><option>2x</option><option>5x</option><option>10x</option>
+          <option>20x</option><option>50x</option><option>100x</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Data otwarcia</label>
+        <input type="date" id="editDate">
+      </div>
+      <div class="form-group">
+        <label>Konto</label>
+        <div class="type-toggle" id="editAccountToggle">
+          <button class="type-btn" onclick="setEditAccount('XTB',this)">💹 XTB</button>
+          <button class="type-btn" onclick="setEditAccount('IKE',this)">🏦 IKE</button>
+        </div>
+        <input type="hidden" id="editAccount" value="XTB">
+      </div>
+      <div class="form-group full">
+        <label>Notatka (opcjonalnie)</label>
+        <input type="text" id="editNote" placeholder="Powód wejścia, strategia...">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="document.getElementById('editModal').classList.remove('open')">Anuluj</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 Zapisz zmiany</button>
     </div>
   </div>
 </div>
@@ -1230,6 +1302,21 @@ function calcClosedPnL(pos){
   return (entry-closeP)*qty*lev;
 }
 
+// ============ DASHBOARD CURRENCY TOGGLE ============
+let dashCurr = 'USD';
+
+function setDashCurr(curr){
+  dashCurr = curr;
+  document.getElementById('dashCurrBtn-USD').classList.toggle('active', curr==='USD');
+  document.getElementById('dashCurrBtn-PLN').classList.toggle('active', curr==='PLN');
+  renderDashboard();
+}
+
+function fmtDash(usdValue){
+  if(dashCurr==='PLN') return fmtPLN(usdValue * (fxRates.USD || 4.0));
+  return fmtUSD(usdValue);
+}
+
 // ============ DASHBOARD ============
 function renderDashboard(){
   const open=state.positions.filter(p=>p.status==='open');
@@ -1247,30 +1334,31 @@ function renderDashboard(){
   const realizedPnL=closed.reduce((s,p)=>s+calcClosedPnL(p),0);
   const totalPnL=totalCurValue-totalInvested;
   const totalPnLPct=totalInvested?totalPnL/totalInvested*100:0;
+  const currLabel = dashCurr==='PLN' ? 'PLN' : 'USD';
 
-  setEl('totalValue',fmtUSD(totalCurValue+(state.stableBalance||0)));
+  setEl('totalValue',fmtDash(totalCurValue+(state.stableBalance||0)));
   // XTB / IKE cards
   const xtbEl=document.getElementById('xtbValue');
   const ikeEl=document.getElementById('ikeValue');
   const xtbSubEl=document.getElementById('xtbSub');
   const ikeSubEl=document.getElementById('ikeSub');
-  if(xtbEl) xtbEl.textContent=fmtUSD(xtbValue);
-  if(ikeEl) ikeEl.textContent=fmtUSD(ikeValue);
+  if(xtbEl) xtbEl.textContent=fmtDash(xtbValue);
+  if(ikeEl) ikeEl.textContent=fmtDash(ikeValue);
   if(xtbSubEl) xtbSubEl.textContent=xtbCount+' pozycji otwartych';
   if(ikeSubEl) ikeSubEl.textContent=ikeCount+' pozycji otwartych';
 
-  setEl('totalPnL',fmtUSD(totalPnL),totalPnL>=0?'positive':'negative');
+  setEl('totalPnL',fmtDash(totalPnL),totalPnL>=0?'positive':'negative');
   setEl('totalPnLPct',fmt(totalPnLPct,2)+'%');
-  setEl('realizedPnL',fmtUSD(realizedPnL),realizedPnL>=0?'positive':'negative');
+  setEl('realizedPnL',fmtDash(realizedPnL),realizedPnL>=0?'positive':'negative');
   setEl('openPositions',open.length+' / '+(open.length+closed.length));
   setEl('openSub',closed.length+' zamknięte');
   if(bestPos){
     setEl('bestPos',bestPos.ticker,'positive');
-    setEl('bestPosSub','+'+fmt(bestPnl,2)+' USD');
+    setEl('bestPosSub','+'+fmt(bestPnl,2)+' '+currLabel);
   }
   // STABLE
   const stableEl=document.getElementById('stableBalanceCard');
-  if(stableEl) stableEl.textContent=fmtUSD(state.stableBalance||0);
+  if(stableEl) stableEl.textContent=fmtDash(state.stableBalance||0);
   updateGoalBar(totalCurValue+(state.stableBalance||0));
   renderMainChart(totalCurValue);
   renderAllocChart(open);
@@ -1509,11 +1597,12 @@ function renderPositionsTable(){
       <td class="mono">${fmt(p.entryPrice,4)}</td>
       <td class="mono">${curP}</td>
       <td class="mono">${lev}</td>
-      <td class="mono">${fmt(r.curValue,2)} USD</td>
-      <td class="mono ${pnlCls}">${r.pnl>=0?'+':''}${fmt(r.pnl,2)} USD</td>
+      <td class="mono">${dashCurr==='PLN'?fmt(r.curValue*(fxRates.USD||4),2)+' PLN':fmt(r.curValue,2)+' USD'}</td>
+      <td class="mono ${pnlCls}">${r.pnl>=0?'+':''}${dashCurr==='PLN'?fmt(r.pnl*(fxRates.USD||4),2)+' PLN':fmt(r.pnl,2)+' USD'}</td>
       <td class="${pnlCls}">${fmt(r.pnlPct,2)}%</td>
       <td style="color:var(--text3);font-size:12px">${p.date||''}</td>
-      <td style="display:flex;gap:6px;padding:12px 10px">
+      <td style="display:flex;gap:6px;padding:12px 10px;flex-wrap:wrap">
+        <button class="btn" style="padding:4px 10px;font-size:12px" onclick="openEditModal('${p.id}')">✏️</button>
         ${p.status==='open'?`<button class="btn" style="padding:4px 10px;font-size:12px" onclick="openCloseModal('${p.id}')">Zamknij</button>`:'<span style="color:var(--accent3);font-size:12px">✓ Zamknięta</span>'}
         <button class="btn-danger btn" onclick="deletePos('${p.id}')">✕</button>
       </td>
@@ -1731,6 +1820,107 @@ function deletePos(id){
   if(!confirm('Usunąć pozycję?')) return;
   state.positions=state.positions.filter(p=>p.id!==id);
   save();renderPositionsTable();renderDashboard();
+}
+
+// ============ EDIT POSITION ============
+function openEditModal(id){
+  const pos=state.positions.find(p=>p.id===id);
+  if(!pos) return;
+  document.getElementById('editPosId').value=id;
+  document.getElementById('editTicker').value=pos.ticker||'';
+  document.getElementById('editQty').value=pos.qty||'';
+  document.getElementById('editPrice').value=pos.entryPrice||'';
+  document.getElementById('editDate').value=pos.date||'';
+  document.getElementById('editNote').value=pos.note||'';
+
+  // Typ
+  const type=pos.type||'SPOT';
+  document.getElementById('editType').value=type;
+  document.querySelectorAll('#editTypeToggle .type-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent.trim()===type);
+  });
+  const isCFD=type==='CFD';
+  document.getElementById('editDirectionField').style.display=isCFD?'':'none';
+  document.getElementById('editLeverageField').style.display=isCFD?'':'none';
+
+  // Kierunek
+  if(isCFD){
+    const dir=pos.direction||'LONG';
+    document.getElementById('editDir').value=dir;
+    document.querySelectorAll('#editDirectionField .type-btn').forEach(b=>{
+      b.classList.toggle('active', b.textContent.includes(dir));
+    });
+    const levSel=document.getElementById('editLev');
+    levSel.value=pos.leverage||'1x';
+  }
+
+  // Konto
+  const acc=pos.account||'XTB';
+  document.getElementById('editAccount').value=acc;
+  document.querySelectorAll('#editAccountToggle .type-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent.includes(acc));
+  });
+
+  document.getElementById('editModal').classList.add('open');
+}
+
+function setEditType(t,btn){
+  document.getElementById('editType').value=t;
+  document.querySelectorAll('#editTypeToggle .type-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const isCFD=t==='CFD';
+  document.getElementById('editDirectionField').style.display=isCFD?'':'none';
+  document.getElementById('editLeverageField').style.display=isCFD?'':'none';
+}
+
+function setEditDir(d,btn){
+  document.getElementById('editDir').value=d;
+  document.querySelectorAll('#editDirectionField .type-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function setEditAccount(a,btn){
+  document.getElementById('editAccount').value=a;
+  document.querySelectorAll('#editAccountToggle .type-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function saveEdit(){
+  const id=document.getElementById('editPosId').value;
+  const pos=state.positions.find(p=>p.id===id);
+  if(!pos) return;
+  const ticker=(document.getElementById('editTicker').value||'').trim().toUpperCase();
+  const qty=parseFloat(document.getElementById('editQty').value);
+  const price=parseFloat(document.getElementById('editPrice').value);
+  const date=document.getElementById('editDate').value;
+  const note=document.getElementById('editNote').value;
+  const type=document.getElementById('editType').value;
+  const account=document.getElementById('editAccount').value;
+  if(!ticker) return alert('Podaj ticker');
+  if(!qty||qty<=0) return alert('Podaj ilość');
+  if(!price||price<=0) return alert('Podaj cenę wejścia');
+  if(!date) return alert('Wybierz datę');
+
+  pos.ticker=ticker;
+  pos.qty=qty;
+  pos.entryPrice=price;
+  pos.date=date;
+  pos.note=note;
+  pos.type=type;
+  pos.account=account;
+  pos.currency='USD';
+  if(type==='CFD'){
+    pos.direction=document.getElementById('editDir').value;
+    pos.leverage=document.getElementById('editLev').value;
+  } else {
+    delete pos.direction;
+    delete pos.leverage;
+  }
+
+  save();
+  document.getElementById('editModal').classList.remove('open');
+  renderPositionsTable();
+  renderDashboard();
 }
 
 // ============ STABLE ============
