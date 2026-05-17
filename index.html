@@ -691,10 +691,10 @@ body{padding-top:36px}
       </div>
       <div class="form-group cfd-fields" id="leverageField">
         <label>Dźwignia</label>
-        <select id="posLev">
-          <option>1x</option><option>2x</option><option>5x</option><option>10x</option>
-          <option>20x</option><option>50x</option><option>100x</option>
-        </select>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" id="posLev" min="1" max="100" value="1" style="width:80px" oninput="this.value=Math.min(100,Math.max(1,parseInt(this.value)||1))">
+          <span style="font-size:13px;color:var(--text2)">x &nbsp;(1–100)</span>
+        </div>
       </div>
       <div class="form-group">
         <label>Data otwarcia</label>
@@ -756,10 +756,10 @@ body{padding-top:36px}
       </div>
       <div class="form-group cfd-edit-fields" id="editLeverageField" style="display:none">
         <label>Dźwignia</label>
-        <select id="editLev">
-          <option>1x</option><option>2x</option><option>5x</option><option>10x</option>
-          <option>20x</option><option>50x</option><option>100x</option>
-        </select>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" id="editLev" min="1" max="100" value="1" style="width:80px" oninput="this.value=Math.min(100,Math.max(1,parseInt(this.value)||1))">
+          <span style="font-size:13px;color:var(--text2)">x &nbsp;(1–100)</span>
+        </div>
       </div>
       <div class="form-group">
         <label>Data otwarcia</label>
@@ -1332,8 +1332,10 @@ function renderDashboard(){
     else{xtbValue+=r.curValue;xtbCount++;}
   });
   const realizedPnL=closed.reduce((s,p)=>s+calcClosedPnL(p),0);
-  const totalPnL=totalCurValue-totalInvested;
-  const totalPnLPct=totalInvested?totalPnL/totalInvested*100:0;
+  const unrealizedPnL=totalCurValue-totalInvested;
+  // Zysk/Strata = niezrealizowany (otwarte) + zrealizowany (zamknięte, może być ujemny)
+  const totalPnL=unrealizedPnL+realizedPnL;
+  const totalPnLPct=totalInvested?unrealizedPnL/totalInvested*100:0;
   const currLabel = dashCurr==='PLN' ? 'PLN' : 'USD';
 
   setEl('totalValue',fmtDash(totalCurValue+(state.stableBalance||0)));
@@ -1710,7 +1712,7 @@ async function addPosition(){
   const price=parseFloat(document.getElementById('posPrice').value);
   const date=document.getElementById('posDate').value;
   const note=document.getElementById('posNote').value;
-  const lev=document.getElementById('posLev').value;
+  const lev=document.getElementById('posLev').value+'x';
   const dir=document.getElementById('posDir').value;
   const cur='USD';
   const account=document.getElementById('posAccount').value||'XTB';
@@ -1789,6 +1791,18 @@ function confirmClose(){
   const closeQty=Math.min(cq,origQty);
   const valueUSD=cp*closeQty;
 
+  // Oblicz realny P&L (może być ujemny!)
+  const entryPrice=parseFloat(pos.entryPrice)||0;
+  const lev=parseInt((pos.leverage||'1x').replace('x',''))||1;
+  let realizedPnLClose=0;
+  if(pos.type==='SPOT'){
+    realizedPnLClose=(cp-entryPrice)*closeQty;
+  } else if(pos.direction==='LONG'){
+    realizedPnLClose=(cp-entryPrice)*closeQty*lev;
+  } else {
+    realizedPnLClose=(entryPrice-cp)*closeQty*lev;
+  }
+
   if(Math.abs(closeQty-origQty)<0.0000001){
     // close entire position
     pos.status='closed'; pos.closePrice=cp; pos.closeDate=cd; pos.qty=origQty;
@@ -1810,6 +1824,10 @@ function confirmClose(){
     if(!state.stableBalance) state.stableBalance=0;
     state.stableBalance+=valueUSD;
   }
+
+  // Zawsze dodaj realny P&L do skumulowanego zrealizowanego P&L (może być ujemny)
+  if(!state.totalRealizedPnL) state.totalRealizedPnL=0;
+  state.totalRealizedPnL+=realizedPnLClose;
 
   save();
   document.getElementById('closePositionModal').classList.remove('open');
@@ -1851,7 +1869,7 @@ function openEditModal(id){
       b.classList.toggle('active', b.textContent.includes(dir));
     });
     const levSel=document.getElementById('editLev');
-    levSel.value=pos.leverage||'1x';
+    levSel.value=parseInt((pos.leverage||'1x').replace('x',''))||1;
   }
 
   // Konto
@@ -1911,7 +1929,7 @@ function saveEdit(){
   pos.currency='USD';
   if(type==='CFD'){
     pos.direction=document.getElementById('editDir').value;
-    pos.leverage=document.getElementById('editLev').value;
+    pos.leverage=document.getElementById('editLev').value+'x';
   } else {
     delete pos.direction;
     delete pos.leverage;
