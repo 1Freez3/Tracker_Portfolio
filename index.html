@@ -1332,8 +1332,10 @@ function renderDashboard(){
     else{xtbValue+=r.curValue;xtbCount++;}
   });
   const realizedPnL=closed.reduce((s,p)=>s+calcClosedPnL(p),0);
-  const totalPnL=totalCurValue-totalInvested;
-  const totalPnLPct=totalInvested?totalPnL/totalInvested*100:0;
+  const unrealizedPnL=totalCurValue-totalInvested;
+  // Zysk/Strata = niezrealizowany (otwarte) + zrealizowany (zamknięte, może być ujemny)
+  const totalPnL=unrealizedPnL+realizedPnL;
+  const totalPnLPct=totalInvested?unrealizedPnL/totalInvested*100:0;
   const currLabel = dashCurr==='PLN' ? 'PLN' : 'USD';
 
   setEl('totalValue',fmtDash(totalCurValue+(state.stableBalance||0)));
@@ -1789,6 +1791,18 @@ function confirmClose(){
   const closeQty=Math.min(cq,origQty);
   const valueUSD=cp*closeQty;
 
+  // Oblicz realny P&L (może być ujemny!)
+  const entryPrice=parseFloat(pos.entryPrice)||0;
+  const lev=parseInt((pos.leverage||'1x').replace('x',''))||1;
+  let realizedPnLClose=0;
+  if(pos.type==='SPOT'){
+    realizedPnLClose=(cp-entryPrice)*closeQty;
+  } else if(pos.direction==='LONG'){
+    realizedPnLClose=(cp-entryPrice)*closeQty*lev;
+  } else {
+    realizedPnLClose=(entryPrice-cp)*closeQty*lev;
+  }
+
   if(Math.abs(closeQty-origQty)<0.0000001){
     // close entire position
     pos.status='closed'; pos.closePrice=cp; pos.closeDate=cd; pos.qty=origQty;
@@ -1810,6 +1824,10 @@ function confirmClose(){
     if(!state.stableBalance) state.stableBalance=0;
     state.stableBalance+=valueUSD;
   }
+
+  // Zawsze dodaj realny P&L do skumulowanego zrealizowanego P&L (może być ujemny)
+  if(!state.totalRealizedPnL) state.totalRealizedPnL=0;
+  state.totalRealizedPnL+=realizedPnLClose;
 
   save();
   document.getElementById('closePositionModal').classList.remove('open');
