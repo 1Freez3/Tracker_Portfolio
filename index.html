@@ -382,7 +382,7 @@ body{padding-top:36px}
         <thead>
           <tr>
             <th>Ticker</th><th>Konto</th><th>Typ</th><th>Kierunek</th><th>Ilość</th>
-            <th>Cena wejścia</th><th>Cena obecna</th><th>Dźwignia</th>
+            <th>Cena wejścia</th><th>Cena wyjścia</th><th>Cena obecna</th><th>Dźwignia</th>
             <th>Wartość</th><th>P&amp;L</th><th>P&amp;L %</th><th>Data</th><th>Akcje</th>
           </tr>
         </thead>
@@ -1149,9 +1149,8 @@ async function fetchPriceStooq(ticker){
 
 // ============ WYKRYJ ŹRÓDŁO ============
 function isGPWTicker(t){
-  // GPW tickers zawsze kończą się na .WA lub .PL
-  // AAPL, TSLA itp. NIE mają kropki — to US tickers, nie GPW
-  return /\.(WA|PL)$/i.test(t);
+  // Brak kropki LUB kończy się na .WA / .PL = GPW
+  return !t.includes('.') || /\.(WA|PL)$/i.test(t);
 }
 
 // ============ FX REFRESH ============
@@ -1234,6 +1233,7 @@ async function refreshPrices(manual=false){
   renderDashboard();
   renderPricesGrid();
   renderTickerTape();
+  renderPositionsTable();
   isRefreshing = false;
 }
 
@@ -1583,12 +1583,13 @@ function renderPositionsTable(){
   const list=state.positions.filter(p=>(ft==='all'||p.type===ft)&&(fs==='all'||p.status===fs)&&(fa==='all'||p.account===fa));
   const body=document.getElementById('positionsBody');
   if(!body) return;
-  if(!list.length){body.innerHTML=`<tr><td colspan="13"><div class="empty-state"><div style="font-size:32px">📭</div><p>Brak pozycji – dodaj pierwszą!</p></div></td></tr>`;return;}
+  if(!list.length){body.innerHTML=`<tr><td colspan="14"><div class="empty-state"><div style="font-size:32px">📭</div><p>Brak pozycji – dodaj pierwszą!</p></div></td></tr>`;return;}
   body.innerHTML=list.map(p=>{
     const r=p.status==='open'?calcPnL(p):{pnl:calcClosedPnL(p),pnlPct:0,curValue:(parseFloat(p.closePrice)||parseFloat(p.entryPrice))*(parseFloat(p.qty)||0),cur:parseFloat(p.closePrice)||parseFloat(p.entryPrice)};
     const pnlCls=r.pnl>=0?'positive':'negative';
     const lev=p.type==='CFD'?(p.leverage||'1x'):'—';
-    const curP=p.status==='open'?(state.prices[p.ticker]?.price?fmt(state.prices[p.ticker].price,2):'—'):(fmt(parseFloat(p.closePrice),2)||'—');
+    const curP=p.status==='open'?(state.prices[p.ticker]?.price?fmt(state.prices[p.ticker].price,2):'ładowanie…'):'—';
+    const exitP=p.closePrice?fmt(parseFloat(p.closePrice),4):'—';
     const acc=p.account||'XTB';
     const accStyle=acc==='IKE'?'background:rgba(124,58,237,.15);color:#a78bfa':'background:rgba(0,212,255,.15);color:var(--accent)';
     return`<tr>
@@ -1598,6 +1599,7 @@ function renderPositionsTable(){
       <td>${p.type==='CFD'?`<span class="badge ${p.direction==='LONG'?'badge-long':'badge-short'}">${p.direction}</span>`:'—'}</td>
       <td class="mono">${fmt(p.qty,4)}</td>
       <td class="mono">${fmt(p.entryPrice,4)}</td>
+      <td class="mono" style="color:${p.closePrice?'var(--text2)':'var(--text3)'}">${exitP}</td>
       <td class="mono">${curP}</td>
       <td class="mono">${lev}</td>
       <td class="mono">${dashCurr==='PLN'?fmt(r.curValue*(fxRates.USD||4),2)+' PLN':fmt(r.curValue,2)+' USD'}</td>
