@@ -1149,8 +1149,9 @@ async function fetchPriceStooq(ticker){
 
 // ============ WYKRYJ ŹRÓDŁO ============
 function isGPWTicker(t){
-  // Brak kropki LUB kończy się na .WA / .PL = GPW
-  return !t.includes('.') || /\.(WA|PL)$/i.test(t);
+  // GPW tickers zawsze kończą się na .WA lub .PL
+  // AAPL, TSLA itp. NIE mają kropki — to US tickers, nie GPW
+  return /\.(WA|PL)$/i.test(t);
 }
 
 // ============ FX REFRESH ============
